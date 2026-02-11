@@ -11,6 +11,7 @@ This skill addresses recurring failures when responding to PR feedback:
 - **Replying to comments but forgetting to resolve threads** (most common)
 - **Only checking inline threads, missing conversation comments** (common)
 - **Missing non-blocking feedback in approved PRs** (common - approval creates false sense of completion)
+- **Processing feedback on unassigned PRs, leaving ownership unclear** (common)
 - Losing track of which feedback has been addressed
 - Batch processing feedback (fix all → reply all → resolve all), which causes forgotten resolutions
 - Not assessing whether reviewer suggestions are actually correct
@@ -66,11 +67,23 @@ This skill addresses recurring failures when responding to PR feedback:
 - **Assess each observation**: Even if marked "non-blocking", consider addressing for code quality
 - Don't use approval as signal to stop reading - parse the full comment text
 
+### Assignee Ownership (Required)
+- Feedback handling should keep PR ownership explicit: assignee = authenticated GitHub user driving the fixes
+- If the PR has no assignee, add the authenticated user before processing comments
+- If someone else is already assigned for valid team reasons, keep them and add authenticated user only when policy requires co-ownership
+
 ---
 
 ## Workflow
 
-### 0. Check and Resolve Merge Conflicts (If Present)
+### 0. Ensure PR Is Assigned to the Authenticated User
+**Before processing any feedback, ensure the PR has explicit ownership:**
+- Resolve authenticated login once (`gh api user --jq .login`)
+- Check current assignees on the PR
+- If authenticated user is missing, add them as assignee immediately
+- Verify assignee update succeeded, then continue
+
+### 1. Check and Resolve Merge Conflicts (If Present)
 **BEFORE processing feedback, handle any merge conflicts**:
 
 **Check for conflicts**:
@@ -87,7 +100,7 @@ This skill addresses recurring failures when responding to PR feedback:
 
 **Only proceed to feedback processing after conflicts are resolved.**
 
-### 1. Get All Feedback (Both Sources)
+### 2. Get All Feedback (Both Sources)
 **Check BOTH inline threads AND conversation comments**:
 - **Review threads**: Fetch unresolved review threads via GraphQL API (inline code comments with file/line context)
 - **Conversation comments**: Check PR conversation tab with `gh pr view $PR --comments` (review summaries, approvals with suggestions)
@@ -104,7 +117,7 @@ This skill addresses recurring failures when responding to PR feedback:
 - Create one todo per feedback item
 - Prioritize: blocking issues → security → suggestions → minor observations
 
-### 2. Process Each Comment Individually
+### 3. Process Each Comment Individually
 
 **CRITICAL**: You MUST complete ALL steps (A→B→C→D) for ONE comment before moving to the next.
 
@@ -157,7 +170,7 @@ This skill addresses recurring failures when responding to PR feedback:
 
 **Now and ONLY now proceed to the next comment. Return to step A.**
 
-### 3. Post Summary Comment
+### 4. Post Summary Comment
 After processing all feedback (inline threads + conversation comments):
 - List what was addressed with commit references
 - Reply to conversation comments with explanations
@@ -242,6 +255,13 @@ mutation {
 }'
 ```
 
+### Ensure Assignee
+```bash
+GH_USER="$(gh api user --jq .login)"
+gh pr edit "$PR" --add-assignee "$GH_USER"
+gh pr view "$PR" --json assignees --jq '.assignees[].login'
+```
+
 ### Post Summary and Request Re-Review
 ```bash
 gh pr comment $PR -b "All feedback addressed:
@@ -281,6 +301,11 @@ gh pr comment $PR -b "All feedback addressed:
 ### ❌ Not Tracking Progress
 **Problem**: Losing track of which threads are addressed
 **Fix**: Use TodoWrite to track each thread systematically
+
+### ❌ Skipping Assignee Check Before Feedback Work
+**Problem**: Addressing review comments while PR remains unassigned, causing unclear ownership and follow-up gaps.
+**Fix**: Make assignee validation the first step in workflow: authenticated user must be in PR assignees before processing comments.
+**Detection**: `gh pr view $PR --json assignees --jq '.assignees[].login'` does not include the authenticated user.
 
 ### ❌ Posting Duplicate Summary Comments
 **Problem**: Re-running `gh pr comment` after a partial failure posts 2-3 identical re-review summaries, spamming reviewers.

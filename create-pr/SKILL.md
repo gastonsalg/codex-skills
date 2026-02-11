@@ -14,6 +14,7 @@ This skill enforces the mandatory git workflow for production safety. Direct pus
 - Pushing directly to protected branches
 - Skipping tests before committing
 - Creating PRs without running code review
+- Leaving PRs unassigned after creation
 - Committing secrets or temporary files
 - Creating PRs targeting wrong base branch (feature branch instead of main)
 - Using stale local branches from previous (merged) PRs instead of branching fresh from main
@@ -41,6 +42,7 @@ This skill enforces the mandatory git workflow for production safety. Direct pus
 - ✅ Work in feature branches (create if on main)
 - ✅ Run relevant tests before committing
 - ✅ Run code review before creating PR
+- ✅ Assign the PR to the authenticated GitHub user (PR owner) after creation
 - ✅ Verify staged changes (avoid secrets)
 - ✅ Write descriptive commit messages
 
@@ -96,7 +98,7 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 - Push with upstream tracking: `git push -u origin <branch-name>`
 - Verify push succeeded
 
-### 6. Assess Base Branch & Create Pull Request
+### 6. Assess Base Branch, Create Pull Request, and Set Assignee
 **CRITICAL: Determine correct base/destination branch before creating PR**
 
 **Default pattern (most common):**
@@ -123,8 +125,14 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 
 **Create PR with descriptive title and structured body**
 
+**Immediately assign PR ownership:**
+- Resolve authenticated GitHub login via API (`gh api user --jq .login`)
+- Assign PR to that login (the user/account driving the work)
+- Verify the PR now shows that assignee before leaving this step
+
 ### 7. Final Verification
 - View PR to confirm creation
+- Confirm assignee is set to authenticated user login
 - Check CI status (all checks should trigger)
 - Verify no accidental push to main (git log check)
 
@@ -175,6 +183,11 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 - Both PRs target `main` independently
 - Can merge in any order
 
+### ❌ Leaving PR Unassigned
+**Problem**: Creating or updating PRs without setting an assignee leaves ownership unclear.
+**Fix**: Always assign the PR to the authenticated GitHub user right after PR creation (or when updating an existing PR).
+**Detection**: `gh pr view --json assignees --jq '.assignees[].login'` does not include the authenticated user.
+
 ### ❌ Reusing Stale Local Branches
 **Problem**: Using an existing local branch from a previous (already merged) PR instead of creating a fresh branch from main. Causes merge conflicts because local branch is based on old main.
 **Fix**: Always check if the current branch is fresh. Red flags: branch name references old version/task, branch doesn't exist on remote, branch is behind main.
@@ -211,6 +224,7 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 
 **PR exists for branch:**
 - Add more commits and push (updates existing PR)
+- Verify assignee still includes authenticated user; add it if missing
 
 **Merge conflicts:**
 - Fetch main, rebase, resolve conflicts, push with `--force-with-lease`
