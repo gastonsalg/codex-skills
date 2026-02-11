@@ -18,7 +18,7 @@ This skill enforces the mandatory git workflow for production safety. Direct pus
 - Creating PRs targeting wrong base branch (feature branch instead of main)
 - Using stale local branches from previous (merged) PRs instead of branching fresh from main
 - Creating feature branches from outdated local main (not pulling before branching)
-- Forgetting to request automated reviews after PR creation
+- Forgetting post-creation PR verification checks
 
 **Why this matters:**
 - Production deployments trigger automatically from main
@@ -43,7 +43,6 @@ This skill enforces the mandatory git workflow for production safety. Direct pus
 - ✅ Run code review before creating PR
 - ✅ Verify staged changes (avoid secrets)
 - ✅ Write descriptive commit messages
-- ✅ Request Copilot review after PR creation
 
 ---
 
@@ -124,14 +123,7 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 
 **Create PR with descriptive title and structured body**
 
-### 7. Request Copilot Review
-**CRITICAL: Always request Copilot review immediately after PR creation**
-
-- Request Copilot as a reviewer via the GitHub API (not via comment)
-- Use: `gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers --method POST -f 'reviewers[]=copilot-pull-request-reviewer[bot]'`
-- Verify Copilot appears in the PR's requested reviewers before proceeding
-
-### 8. Final Verification
+### 7. Final Verification
 - View PR to confirm creation
 - Check CI status (all checks should trigger)
 - Verify no accidental push to main (git log check)
@@ -202,9 +194,6 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 ---
 
 
-### ❌ Forgetting Copilot Review Request
-**Problem**: Creating PR but not requesting Copilot review, missing automated feedback
-**Fix**: Immediately after PR creation, request Copilot as reviewer via API
 
 ### ❌ Quoted `\n` Strings in PR Body
 **Problem**: Running `gh pr edit --body "line1\nline2"` stores literal `\n`, rendering the entire body as a single heading.
@@ -245,4 +234,3 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 - ❌ Secrets in staged changes
 - ❌ Force push to main/master
 - ❌ PR targeting feature branch without clear justification
-- ❌ PR created without Copilot review request

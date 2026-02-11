@@ -12,3 +12,6 @@ Thumbs.db
 # Temp files
 *.tmp
 .temp/
+
+# Codex-managed system skills (not personal skill source)
+.system/
