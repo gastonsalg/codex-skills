@@ -106,6 +106,7 @@ This skill addresses recurring failures in PR reviews:
 - List NEW findings by severity with file:line references
 - State approval rationale clearly
 - Keep concise - no PR overview, no file lists
+- For multi-line review text, do NOT use quoted `\n` in `--body`; use `--body-file` (or heredoc to a temp file) and verify rendered formatting after posting
 
 ### 8. Return to Main Branch
 - Always return to main after review
@@ -148,6 +149,19 @@ gh api graphql -f query='mutation($threadId: ID!) {
   }
 }' -f threadId="THREAD_ID"
 ```
+
+### Review Summary Formatting (Avoid Literal `\n`)
+```bash
+# Write review body with real newlines, then submit
+cat <<'EOF' > /tmp/review-body.md
+Review result: blocker found.
+
+- [Critical] ...
+EOF
+
+gh pr review $PR --comment --body-file /tmp/review-body.md
+```
+Use `--body-file` for multi-line reviews so GitHub renders Markdown correctly.
 
 ---
 
@@ -194,6 +208,10 @@ gh api graphql -f query='mutation($threadId: ID!) {
 **Fix**: If an issue was already reported (even if unresolved), don't create a new comment - instead reply to and resolve the existing thread
 **Detection**: You find yourself posting a comment about something Copilot or another reviewer already mentioned
 
+### ❌ Quoted `\n` Strings in Review Summary
+**Problem**: Running `gh pr review --comment --body "line1\nline2"` sends literal `\n`, so the review renders as plain escaped text.
+**Fix**: Put multi-line content in a file and submit with `--body-file`, then verify formatting in `gh pr view --comments`.
+
 ### ❌ Attempting to Approve Self-Authored PR
 **Problem**: Trying to use `gh pr review --approve` on a PR you created, causing "Can not approve your own pull request" error
 **Fix**: Check PR author before approval - if it matches current user, use `--comment` instead of `--approve`
@@ -214,3 +232,4 @@ gh api graphql -f query='mutation($threadId: ID!) {
 - ❌ Posting new comment about issue already mentioned in existing unresolved thread
 - ❌ Leaving unresolved threads when issues have been fixed (from any reviewer)
 - ❌ Attempting to approve PR without checking if you're the author
+- ❌ Posting review summary with quoted `\n` in `--body` (renders escaped text)
