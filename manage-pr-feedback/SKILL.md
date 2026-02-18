@@ -181,6 +181,7 @@ After processing all feedback (inline threads + conversation comments):
 - End summary comment body with signature footer: `🤖 Generated with Codex`
 - Always post a NEW summary comment for each completed feedback pass; do not edit prior summary comments.
 - In multi-pass workflows (for example `pull-request-loop`), include pass/cycle identifier in the summary heading (for example, `Feedback Pass 2`) so timeline context remains intact.
+- Before posting, verify the outgoing body contains the exact footer `🤖 Generated with Codex`.
 - When posting new summaries, pipe the body via a single-quoted heredoc so the shell doesn't swallow backticks or quotes:
   ```bash
   cat <<'EOF' | gh pr comment $PR --repo owner/repo -F -

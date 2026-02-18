@@ -94,6 +94,7 @@ This skill addresses recurring failures in PR reviews:
 - Requires: `commit_id`, `path`, `line`, `side` ("RIGHT" for new/modified, "LEFT" for deleted)
 - Use `suggestion` code fence for one-click fixes
 - Append signature footer at end of each comment body: `🤖 Generated with Codex`
+- Before posting, verify comment body includes footer `🤖 Generated with Codex`
 
 **For architectural/conceptual feedback** - Use review summary
 
@@ -120,6 +121,7 @@ This skill addresses recurring failures in PR reviews:
 - Keep concise - no PR overview, no file lists
 - For multi-line review text, do NOT use quoted `\n` in `--body`; use `--body-file` (or heredoc to a temp file) and verify rendered formatting after posting
 - End review summary text with signature footer: `🤖 Generated with Codex`
+- Before posting, verify review summary body includes footer `🤖 Generated with Codex`
 
 ### 8. Return to Main Branch
 - Always return to main after review

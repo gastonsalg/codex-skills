@@ -24,6 +24,7 @@ Goal: reach a clean, review-ready PR state or stop safely with a clear escalatio
 - Prefer small, test-backed fixes each cycle.
 - Stop when loop risk appears; escalate instead of grinding.
 - Preserve timeline context: each cycle posts a new cycle-labeled summary comment; never edit previous cycle summaries.
+- Add provenance footer `🤖 Generated with Codex` to every loop-authored GitHub comment (cycle summaries, completion update, escalation update).
 
 ## Required Loop State
 
@@ -98,6 +99,7 @@ Maintain these values at the start and end of every cycle:
 
 - Recompute full loop state.
 - Ensure this cycle has a new summary comment with cycle label (for example, `Cycle 2 Summary`), distinct from prior cycles.
+- Ensure cycle summary comment ends with `🤖 Generated with Codex`.
 - Compare against previous cycle:
   - Did blocker count decrease?
   - Did unresolved thread count decrease?
@@ -142,6 +144,7 @@ Before declaring done:
 - no unresolved branch/worktree mismatch (for example, PR head bound to a different worktree than the one used)
 - `stability_pass_completed=yes` on latest code state
 - no new external findings since last re-review request (or explicitly report pending external review)
+- final loop status comment includes `🤖 Generated with Codex` footer
 
 ## Escalation Output (When Stopping)
 
@@ -169,6 +172,10 @@ Provide:
 ### ❌ Declaring Done Before External Re-Review Settles
 **Problem**: Loop exits clean, then Copilot posts new findings minutes later.
 **Fix**: Run external-review synchronization (Step 5.5) and re-enter loop if new findings appear.
+
+### ❌ Missing Signature on Loop Summary Comments
+**Problem**: Cycle/completion summaries are posted without provenance footer.
+**Fix**: Append a blank line, then `🤖 Generated with Codex` at the end of every loop-authored comment.
 
 ### ❌ Chasing every suggestion indefinitely
 **Problem**: Rabbit hole with no blocker reduction.
@@ -200,3 +207,4 @@ Provide:
 - PR head branch is bound to a different worktree and `execution_worktree` is not updated.
 - Loop attempts to complete with `stability_pass_completed=no`.
 - New external review comments appear after "clean" decision.
+- Cycle/completion/escalation summary comment posted without `🤖 Generated with Codex`.
