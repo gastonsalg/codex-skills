@@ -1,6 +1,6 @@
 # Codex Skills
 
-Personal collection of Codex skills for PR workflow, database migrations, and skill authoring.
+Personal collection of Codex skills for PR workflow, database migrations, ExecPlan work, and skill authoring.
 
 ## Available Skills
 
@@ -21,6 +21,23 @@ Personal collection of Codex skills for PR workflow, database migrations, and sk
 - Reply to comments, resolve threads systematically
 - Trigger: "address PR feedback", "respond to Copilot"
 
+**pull-request-loop**
+- Run iterative review/fix loops until PR blockers are cleared or stop conditions trigger
+- Alternates `review-pr` and `manage-pr-feedback` with cycle tracking
+- Trigger: "run a PR hardening loop", "iterate review/fix cycles"
+
+**pr-merge-cleanup**
+- Clean local and remote branch/worktree state after PR merge
+- Verifies merged state first, then returns repo to updated main/master
+- Trigger: "cleanup after PR merge", "remove merged PR branch/worktree"
+
+### Planning
+
+**exec-plan** (folder: `create-exec-plan`)
+- Create, revise, discuss, or execute Codex ExecPlans
+- Uses `PLAN.md` as source of truth
+- Trigger: "create/revise/execute an ExecPlan"
+
 ### Database Migrations
 
 **safe-migration**
@@ -31,8 +48,8 @@ Personal collection of Codex skills for PR workflow, database migrations, and sk
 ### Meta
 
 **write-skills**
-- Create effective Codex skills
-- Follow Anthropic guidelines + community best practices
+- Create or refactor Codex Agent Skills
+- Follow Codex + Agent Skills specification guidance
 - Trigger: "create a skill", "write a skill"
 
 ### System Skills
@@ -50,11 +67,17 @@ Personal collection of Codex skills for PR workflow, database migrations, and sk
 ### Clone to Personal Skills Directory
 
 ```bash
+# Choose the directory your Codex setup uses.
+# Common options:
+#   ~/.codex/skills
+#   ~/.agents/skills
+SKILLS_DIR="${SKILLS_DIR:-$HOME/.codex/skills}"
+
 # Backup existing skills (if any)
-mv ~/.codex/skills ~/.codex/skills.backup
+mv "$SKILLS_DIR" "${SKILLS_DIR}.backup" 2>/dev/null || true
 
 # Clone this repo as your skills directory
-git clone https://github.com/gastonsalg/codex-skills.git ~/.codex/skills
+git clone https://github.com/gastonsalg/codex-skills.git "$SKILLS_DIR"
 ```
 
 Skills will be available across all your projects immediately.
@@ -63,12 +86,13 @@ Skills will be available across all your projects immediately.
 
 ```bash
 # Create skills directory if it doesn't exist
-mkdir -p ~/.codex/skills
+SKILLS_DIR="${SKILLS_DIR:-$HOME/.codex/skills}"
+mkdir -p "$SKILLS_DIR"
 
 # Clone and copy specific skills
 git clone https://github.com/gastonsalg/codex-skills.git /tmp/codex-skills
-cp -r /tmp/codex-skills/create-pr ~/.codex/skills/
-cp -r /tmp/codex-skills/review-pr ~/.codex/skills/
+cp -r /tmp/codex-skills/create-pr "$SKILLS_DIR/"
+cp -r /tmp/codex-skills/review-pr "$SKILLS_DIR/"
 # ... copy others as needed
 ```
 
@@ -79,17 +103,20 @@ Skills activate automatically based on your requests:
 - "Create a PR for this feature" -> `create-pr`
 - "Review PR #123" -> `review-pr`
 - "Address the Copilot feedback on my PR" -> `manage-pr-feedback`
+- "Run another review/fix pass on this PR" -> `pull-request-loop`
+- "Clean up branches/worktrees after PR merge" -> `pr-merge-cleanup`
+- "Create an ExecPlan for this task" -> `exec-plan`
 - "Check if this Alembic migration is safe" -> `safe-migration`
 - "Help me write a skill for X" -> `write-skills`
 
 ## Organization
 
-**Personal Skills** (`~/.codex/skills/`):
+**Personal Skills** (`~/.codex/skills/` or `~/.agents/skills/`):
 - Available across all your projects
 - Private to you
 - This repo
 
-**Project Skills** (`project/.codex/skills/`):
+**Project Skills** (`project/.agents/skills/`):
 - Specific to one project
 - Committed to git, shared with team
 - Copy relevant skills from this repo
@@ -99,10 +126,11 @@ Skills activate automatically based on your requests:
 All skills follow these principles (from `write-skills`):
 
 - WHAT not HOW: Describe what to achieve, not exact commands
+- Trigger clarity first: `description` must define when to trigger and when not to
 - Focused scope: One capability per skill
 - Address real failures: Document recurring problems
 - Common mistakes section: Learn from actual failure modes
-- Concise: Target 150-220 lines
+- Progressive disclosure: keep SKILL.md lean; move heavy details into `references/`
 - Empowering: Guide Codex, don't hand-hold
 
 ## Maintenance
@@ -110,18 +138,22 @@ All skills follow these principles (from `write-skills`):
 To update skills:
 
 ```bash
-cd ~/.codex/skills
+SKILLS_DIR="${SKILLS_DIR:-$HOME/.codex/skills}"
+cd "$SKILLS_DIR"
 git pull origin main
 ```
 
 To contribute improvements:
 
 ```bash
-cd ~/.codex/skills
+SKILLS_DIR="${SKILLS_DIR:-$HOME/.codex/skills}"
+cd "$SKILLS_DIR"
+git checkout -b feature/describe-change
 # Make changes
 git add .
 git commit -m "improve: describe change"
-git push origin main
+git push -u origin feature/describe-change
+gh pr create
 ```
 
 ## Background
@@ -135,9 +167,9 @@ The collection emphasizes practical, battle-tested patterns over theoretical bes
 
 ## Related
 
-- [Official Claude Code Skills Docs](https://code.claude.com/docs/en/skills)
-- [Anthropic Skills Announcement](https://www.anthropic.com/news/skills)
-- [Community Skills Repository](https://github.com/anthropics/skills)
+- [OpenAI Codex Skills Docs](https://developers.openai.com/codex/skills)
+- [Agent Skills Specification](https://agentskills.io/specification)
+- [OpenAI Skills Repository](https://github.com/openai/skills)
 
 ## License
 
