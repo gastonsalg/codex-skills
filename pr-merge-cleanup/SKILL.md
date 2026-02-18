@@ -1,6 +1,6 @@
 ---
 name: pr-merge-cleanup
-description: Clean up local and remote git state after a PR merge. Use when asked to clean branches/worktrees for a merged PR and leave the repo on an up-to-date local main branch.
+description: Clean local and remote branch/worktree state after a pull request is already merged, then return repository state to updated main/master. Use only for post-merge cleanup. Do not use to review PR code, address feedback, create new PRs, or perform merge actions.
 ---
 
 # PR Merge Cleanup
@@ -45,9 +45,9 @@ Preferred execution path:
 
 Examples:
 ```bash
-~/.codex/skills/pr-merge-cleanup/scripts/cleanup_pr.sh 123
-~/.codex/skills/pr-merge-cleanup/scripts/cleanup_pr.sh https://github.com/owner/repo/pull/123
-~/.codex/skills/pr-merge-cleanup/scripts/cleanup_pr.sh
+scripts/cleanup_pr.sh 123
+scripts/cleanup_pr.sh https://github.com/owner/repo/pull/123
+scripts/cleanup_pr.sh
 ```
 
 ## Workflow
@@ -93,7 +93,12 @@ Examples:
 - Report final state:
   - current branch
   - whether local branch and remote head branch are deleted
-  - whether any worktrees were skipped
+  - whether any worktrees were skipped (with explicit paths/reasons)
+
+### 8. Post-Cleanup Invariant Checkpoint
+- Verify PR head branch no longer exists locally.
+- Verify no worktree is still bound to the PR head branch.
+- If either invariant fails, return a clear manual-action summary and exit non-zero (cleanup is partial, not complete).
 
 ## Common Mistakes
 
@@ -117,6 +122,10 @@ Examples:
 **Problem**: Deletion step fails noisily when branch is already gone.
 **Fix**: Check existence first; treat missing remote branch as success.
 
+### ❌ Reporting success when cleanup is partial
+**Problem**: Dirty/locked worktree skips leave the PR head branch effectively active, but output still looks fully successful.
+**Fix**: Add a post-cleanup invariant checkpoint and fail the run if head-branch artifacts remain.
+
 ## Red Flags (Fail Fast)
 
 - ❌ PR is not merged
@@ -124,3 +133,4 @@ Examples:
 - ❌ Cannot determine repo/PR context from `gh`
 - ❌ Current repository has unresolved local changes that block checkout/pull
 - ❌ Target worktree is dirty/locked and cannot be safely removed
+- ❌ Post-cleanup invariants fail (head branch/worktree artifacts still present)

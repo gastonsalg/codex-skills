@@ -29,6 +29,10 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
+WORKTREE_REMOVED_COUNT=0
+WORKTREE_SKIPPED_COUNT=0
+declare -a WORKTREE_SKIPPED_DETAILS=()
+
 select_target_branch() {
   if git show-ref --verify --quiet refs/heads/main; then
     printf 'main'
@@ -89,22 +93,29 @@ remove_head_worktrees() {
 
     if [[ "$wt_path" == "$repo_root" ]]; then
       warn "Skipping current worktree path: $wt_path"
+      WORKTREE_SKIPPED_COUNT=$((WORKTREE_SKIPPED_COUNT + 1))
+      WORKTREE_SKIPPED_DETAILS+=("current-path:$wt_path")
       return 0
     fi
 
     if [[ "$wt_locked" -eq 1 ]]; then
       warn "Skipping locked worktree for branch '$head_branch': $wt_path"
+      WORKTREE_SKIPPED_COUNT=$((WORKTREE_SKIPPED_COUNT + 1))
+      WORKTREE_SKIPPED_DETAILS+=("locked:$wt_path")
       return 0
     fi
 
     if [[ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null || true)" ]]; then
       warn "Skipping dirty worktree for branch '$head_branch': $wt_path"
+      WORKTREE_SKIPPED_COUNT=$((WORKTREE_SKIPPED_COUNT + 1))
+      WORKTREE_SKIPPED_DETAILS+=("dirty:$wt_path")
       return 0
     fi
 
     log "Removing worktree: $wt_path"
     git worktree remove "$wt_path"
     removed=1
+    WORKTREE_REMOVED_COUNT=$((WORKTREE_REMOVED_COUNT + 1))
   }
 
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -136,6 +147,36 @@ remove_head_worktrees() {
 
   if [[ "$removed" -eq 0 ]]; then
     log "No removable worktrees found for branch '$head_branch'"
+  fi
+}
+
+list_head_worktree_paths() {
+  local head_branch="$1"
+  local wt_path=""
+  local wt_branch=""
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ -z "$line" ]]; then
+      if [[ -n "$wt_path" && "$wt_branch" == "refs/heads/${head_branch}" ]]; then
+        printf '%s\n' "$wt_path"
+      fi
+      wt_path=""
+      wt_branch=""
+      continue
+    fi
+
+    case "$line" in
+      worktree\ *)
+        wt_path="${line#worktree }"
+        ;;
+      branch\ *)
+        wt_branch="${line#branch }"
+        ;;
+    esac
+  done < <(git worktree list --porcelain)
+
+  if [[ -n "$wt_path" && "$wt_branch" == "refs/heads/${head_branch}" ]]; then
+    printf '%s\n' "$wt_path"
   fi
 }
 
@@ -250,10 +291,46 @@ log "Pulling latest origin/$target_branch with --ff-only"
 git pull --ff-only origin "$target_branch"
 
 final_branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+remaining_head_worktrees="$(list_head_worktree_paths "$head_branch")"
+remaining_worktree_count=0
+if [[ -n "${remaining_head_worktrees:-}" ]]; then
+  remaining_worktree_count="$(printf '%s\n' "$remaining_head_worktrees" | sed '/^$/d' | wc -l | tr -d ' ')"
+fi
+
+local_head_branch_exists="no"
+if git show-ref --verify --quiet "refs/heads/$head_branch"; then
+  local_head_branch_exists="yes"
+fi
+
+postcheck_status="pass"
+if [[ "$local_head_branch_exists" == "yes" || "$remaining_worktree_count" != "0" ]]; then
+  postcheck_status="fail"
+fi
 
 printf '\nCleanup summary:\n'
 printf '  PR: #%s (%s)\n' "$pr_number" "$pr_state"
 printf '  Head branch: %s\n' "$head_branch"
 printf '  Remote branch deletion: %s\n' "$remote_deleted"
 printf '  Local branch deletion: %s\n' "$local_deleted"
+printf '  Worktrees removed: %s\n' "$WORKTREE_REMOVED_COUNT"
+printf '  Worktrees skipped: %s\n' "$WORKTREE_SKIPPED_COUNT"
+if [[ "$WORKTREE_SKIPPED_COUNT" -gt 0 ]]; then
+  for entry in "${WORKTREE_SKIPPED_DETAILS[@]}"; do
+    printf '    - %s\n' "$entry"
+  done
+fi
+printf '  Post-cleanup invariant check: %s\n' "$postcheck_status"
+printf '  Head branch exists locally: %s\n' "$local_head_branch_exists"
+printf '  Head-branch worktrees remaining: %s\n' "$remaining_worktree_count"
+if [[ "$remaining_worktree_count" != "0" ]]; then
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    printf '    - %s\n' "$path"
+  done <<<"$remaining_head_worktrees"
+fi
 printf '  Final branch: %s\n' "$final_branch"
+
+if [[ "$postcheck_status" == "fail" ]]; then
+  warn "Cleanup is partial. Manual action required to remove remaining head-branch artifacts."
+  exit 3
+fi
