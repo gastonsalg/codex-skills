@@ -74,6 +74,16 @@ This skill addresses recurring failures in PR reviews:
 - **Verify architecture** - Does it follow project patterns?
 - **Test coverage** - Are edge cases handled?
 
+### 4.5 Run Regression and Performance Sweep on Recently Touched Code
+**CRITICAL: Don't stop at thread-by-thread fixes; check second-order effects**
+- Inspect files changed in the latest fix commits, not only the original diff context.
+- For each touched hotspot, test these reasoning patterns:
+  - **Input-shape regressions**: duplicates, null/undefined, empty lists, boundary counts.
+  - **Guard ordering regressions**: limits/checks applied before normalization (for example count before dedupe).
+  - **Unconditional expensive calls**: new network/IO/tree fetches that can be skipped on common paths.
+  - **Policy/flag parity**: behavior under toggles still matches intended prior semantics.
+- If you find a plausible regression candidate, verify in current code/tests before declaring no findings.
+
 ### 5. Post NEW Findings Only
 **CRITICAL: Only post comments for issues NOT already mentioned**
 - Check your todo list from step 2 - don't duplicate existing unresolved threads
@@ -162,6 +172,10 @@ Minimum reminders:
 **Problem**: Reporting issues that were already fixed in recent commits
 **Fix**: Checkout PR branch, read actual current files, verify issue exists in current code before reporting
 
+### ❌ Missing Second-Order Regression Sweep After Fixes
+**Problem**: Declaring PR clean after resolving known comments without checking newly introduced edge/performance regressions.
+**Fix**: Run a targeted regression/performance sweep on files touched by latest fix commits before final "no findings".
+
 ### ❌ Reviewing Diffs Instead of Actual Code
 **Problem**: Only looking at diffs/commits without reading complete current files
 **Fix**: Always read the full current files to see actual state, not just what changed
@@ -193,6 +207,7 @@ Minimum reminders:
 - ❌ Not checking out and pulling latest PR branch code
 - ❌ Reviewing diffs/commits instead of reading actual current files
 - ❌ Skipping existing feedback check (inline comments + reviews)
+- ❌ Skipping regression/performance sweep on latest fix-touched files
 - ❌ Posting blob comments instead of inline
 - ❌ Assuming code is correct without adversarial analysis
 - ❌ Reporting issues without verifying they exist in current code
