@@ -39,6 +39,9 @@ Maintain these values at the start and end of every cycle:
 - `assignee_present` (yes/no; authenticated GitHub user is in PR assignees)
 - `execution_worktree` (absolute path used for review/fix commands)
 - `head_branch_checked_out` (yes/no; execution worktree is on PR head branch)
+- `latest_fix_commit` (sha or none)
+- `stability_pass_completed` (yes/no)
+- `external_review_pending` (yes/no when re-review requested)
 
 ## Workflow
 
@@ -66,8 +69,19 @@ Maintain these values at the start and end of every cycle:
 
 ### 3. Decision Gate
 
-- If there are no actionable findings and no unresolved threads, go to completion checks.
+- If there are no actionable findings and no unresolved threads, run the stability gate (Step 3.5) before completion checks.
 - Otherwise continue to fix/feedback handling.
+
+### 3.5 Stability Gate (Required Before "Done")
+
+- Run one additional broad review pass focused on second-order regressions in files touched since `latest_fix_commit`.
+- Require explicit checks for:
+  - boundary/duplicate/null input handling
+  - guard/normalization ordering
+  - newly introduced unconditional expensive calls
+  - behavior parity under relevant flags/policies
+- If any new actionable finding appears, continue with Step 4 (do not complete).
+- Mark `stability_pass_completed=yes` only when this pass yields no actionable findings.
 
 ### 4. Run Fix + Feedback Pass (`manage-pr-feedback`)
 
@@ -78,6 +92,7 @@ Maintain these values at the start and end of every cycle:
   4. reply on PR
   5. resolve thread when appropriate
 - Keep changes scoped to issues found in the cycle.
+- Update `latest_fix_commit` after each fix commit.
 
 ### 5. Recompute State and Progress
 
@@ -89,6 +104,13 @@ Maintain these values at the start and end of every cycle:
   - Did fingerprint change meaningfully?
   - Did CI move forward?
   - Is assignee still present?
+
+### 5.5 External Review Synchronization (When Applicable)
+
+- If Copilot or another external reviewer is active on the PR, request re-review after new fixes land.
+- Before declaring completion, check for newly created review threads/comments after the last re-review request.
+- If new external findings appear, return to Step 4.
+- If external review is still pending, report status as "awaiting external review" rather than "fully clean."
 
 ### 6. Evaluate Stop Conditions
 
@@ -118,6 +140,8 @@ Before declaring done:
 - authenticated GitHub user remains assigned to the PR
 - `execution_worktree` still maps to the PR head branch (`head_branch_checked_out=yes`)
 - no unresolved branch/worktree mismatch (for example, PR head bound to a different worktree than the one used)
+- `stability_pass_completed=yes` on latest code state
+- no new external findings since last re-review request (or explicitly report pending external review)
 
 ## Escalation Output (When Stopping)
 
@@ -137,6 +161,14 @@ Provide:
 ### ❌ Re-reviewing without a progress baseline
 **Problem**: Repeated work looks like progress but is not.
 **Fix**: Track and compare explicit cycle state fields.
+
+### ❌ Declaring "No Findings" Without Stability Pass
+**Problem**: Known threads are closed, but new regressions from recent fixes are still undetected.
+**Fix**: Require Step 3.5 stability gate before completion.
+
+### ❌ Declaring Done Before External Re-Review Settles
+**Problem**: Loop exits clean, then Copilot posts new findings minutes later.
+**Fix**: Run external-review synchronization (Step 5.5) and re-enter loop if new findings appear.
 
 ### ❌ Chasing every suggestion indefinitely
 **Problem**: Rabbit hole with no blocker reduction.
@@ -166,3 +198,5 @@ Provide:
 - Reopened threads for the same issue after multiple attempts.
 - Authenticated user is not assigned to the PR after initialization.
 - PR head branch is bound to a different worktree and `execution_worktree` is not updated.
+- Loop attempts to complete with `stability_pass_completed=no`.
+- New external review comments appear after "clean" decision.
