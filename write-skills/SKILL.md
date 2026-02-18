@@ -1,263 +1,220 @@
 ---
 name: write-skills
-description: Creates effective Claude Code skills following official Anthropic guidelines and community best practices. Use when creating or refactoring skills. Focuses on WHAT not HOW, proper structure, and addressing real failure modes.
+description: Create or refactor Codex Agent Skills that follow the open Agent Skills specification and Codex best practices. Use when authoring SKILL.md, frontmatter, skill layout, references/scripts/assets, or agents/openai.yaml.
 ---
 
-# Write Skills Skill
+# Write Skills
 
 ## Overview
 
-This skill encodes best practices for creating Claude Code skills, synthesized from official Anthropic documentation and community "writing-skills" TDD methodology.
+Use this skill to design or refactor skills that are discoverable, reliable, and cheap in context usage.
 
-**Key principle**: Skills should tell Claude WHAT to do (principles), not HOW (exact commands). Skills empower rather than hand-hold.
+Primary source alignment:
+- Codex skills docs: trigger behavior, placement, progressive disclosure, and best practices
+- Agent Skills specification: portable schema and validation rules
+- openai/skills repository: practical patterns used in production-ready skills
 
----
-
-## When Skills Are Appropriate
-
-### ✅ Good Use Cases
-- **Enforcing critical workflows** (git branch rules, production safety)
-- **Teaching specialized domain knowledge** (Alembic safety patterns)
-- **Encoding project-specific conventions** (PR review style)
-- **Addressing recurring failures** (documented baseline problems)
-
-### ❌ Bad Use Cases (Use Documentation Instead)
-- Reference material (templates, checklists) → docs/
-- Extensive how-to guides (step-by-step tutorials) → docs/
-- General best practices (already in training data)
-- One-time tasks (no recurring pattern)
-
-**The Test**: "Does this address a recurring failure or encode unique knowledge?"
-- **Yes** → Skill | **No** → Documentation
+Core principle: optimize for trigger quality and execution reliability, not document length.
 
 ---
 
-## Official Anthropic Requirements
+## Core Principles
 
-### File Structure (CRITICAL)
+### 1. Description Drives Invocation
+- Treat frontmatter `description` as the main trigger contract.
+- State what the skill does, when it should trigger, and when it should not.
+- Keep scope boundaries explicit to avoid accidental implicit invocation.
 
-**Must be named `SKILL.md` (uppercase)** in directory:
-- Personal: `~/.codex/skills/skill-name/SKILL.md` (Codex CLI) or `~/.claude/skills/skill-name/SKILL.md` (Claude)
-- Project: `.codex/skills/skill-name/SKILL.md` or `.claude/skills/skill-name/SKILL.md` depending on repo setup
+### 2. Prefer Instructions First
+- Start with instruction-only skills.
+- Add scripts only when deterministic behavior or repeated code generation is needed.
+- Add references for large domain knowledge; keep SKILL.md focused on workflow.
+- Add assets only when output files/templates are required.
 
-**Common mistakes**: `.claude.md`, `skill.md`, `Skill.md` (all wrong)
+### 3. Keep Context Lean
+- Use progressive disclosure: metadata always loaded, SKILL.md loaded on trigger, references loaded on demand.
+- Keep SKILL.md concise and structured (target well under 500 lines).
+- Avoid duplicating the same content across SKILL.md and references.
 
-### YAML Frontmatter
+### 4. Write Executable Guidance
+- Use imperative instructions with explicit inputs and outputs.
+- Describe checkpoints for fragile multi-step workflows.
+- Encode failure handling and verification, not just happy paths.
+
+### 5. One Skill, One Job
+- A skill should cover one coherent capability.
+- Split broad, multi-domain behavior into separate skills.
+
+---
+
+## Required Format
+
+### Required File
+- Skill folder must contain `SKILL.md` (uppercase).
+
+### Frontmatter (Required)
 ```yaml
 ---
-name: skill-name           # lowercase, hyphens, max 64 chars
-description: What this does and when to use it. Max 1024 chars. Include trigger terms.
+name: skill-name
+description: Explain exactly when this skill should and should not trigger.
 ---
 ```
 
-**Key guidelines**: Focused scope, specific descriptions, clear naming, no duplication
+Frontmatter rules:
+- `name`: lowercase letters, digits, hyphens; <= 64 chars.
+- `description`: <= 1024 chars; specific trigger language.
+- Do not use markdown formatting inside frontmatter values.
+
+### Frontmatter (Optional, Spec/Implementation-Dependent)
+- `author`
+- `license` (prefer SPDX identifier)
+- `version` (semantic versioning if used)
+- `compatibility` (runtime/tool requirements)
+- `allowed-tools` (implementation-specific restrictions)
+- `metadata` (implementation-specific UI/extra metadata)
+
+If portability matters, keep optional fields minimal and confirm target runtime support.
 
 ---
 
-## Recommended Structure
+## Recommended Skill Layout
 
-### 1. Overview (REQUIRED)
-Explain WHY this skill exists:
-- What recurring failures it addresses
-- Why failures matter (consequences)
-- Context (2-3 sentences)
-
-### 2. Core Principles (WHAT to do)
-High-level guidance, not commands:
-- Bullet lists
-- Principles, not procedures
-- "What" not "how"
-
-### 3. Workflow (High-Level)
-Major steps without verbose commands (1-2 sentences each)
-
-**For frequently-violated sequential workflows, add enforcement**:
-- **Checkpoints**: "STOP and verify before proceeding"
-- **Confirmations**: "✅ Step N complete" before next step
-- **State tracking**: "Update todo: mark as 'in_progress'"
-- **Verification**: "Verify X posted successfully"
-- **Self-monitoring**: "If doing Y, STOP - you're violating"
-
-**When to enforce**: User reports violations, steps have dependencies, batch processing causes problems
-
-**Example comparison**:
-```markdown
-❌ Basic: "Reply to each comment and resolve thread"
-✅ Enforced: "Reply → Verify posted → Resolve immediately →
-             Confirm '✅ Complete' → ONLY THEN next"
+```text
+skill-name/
+|-- SKILL.md                # required
+|-- scripts/                # optional, deterministic automation
+|-- references/             # optional, load-on-demand docs
+|-- assets/                 # optional, templates/static resources
+`-- agents/openai.yaml      # optional, Codex UI + policy metadata
 ```
 
-### 4. API Quick Reference (Optional)
-Include only if syntax is non-obvious or error-prone:
-- One example per concept
-- Essential parameters only
-- Brief comments
-
-### 5. Common Mistakes (REQUIRED)
-Document real failure modes:
-```markdown
-### ❌ Mistake Title
-**Problem**: What goes wrong
-**Fix**: How to avoid it
-**Detection**: (optional) Signs you need this fix
-```
-
-Source from: user reports, TDD RED phase, testing experience
-
-### 6. Red Flags (Recommended)
-Bullet list of fast-fail conditions
+Guidelines:
+- Keep references one hop away from SKILL.md (no deep reference chains).
+- If references are long, include search hints in SKILL.md (`rg` patterns or section names).
+- Avoid adding README/changelog-style files that do not improve agent execution.
 
 ---
 
-## Length Guidelines
+## Codex Discovery and Placement
 
-**Target**: 150-220 lines per skill
+Prefer standard Codex skill locations:
+- Repository scope: `.agents/skills` (searched from current directory up to repo root)
+- User scope: `~/.agents/skills`
+- Admin scope: `/etc/codex/skills`
 
-**If exceeding 250 lines**: Split skills, move reference material to docs/, consolidate content
-
----
-
-## WHAT vs HOW - The Key Distinction
-
-### ❌ TOO MUCH HOW (Hand-Holding)
-```markdown
-1. **Check branch**:
-   ```bash
-   CURRENT_BRANCH=$(git branch --show-current)
-   if [[ "$CURRENT_BRANCH" == "main" ]]; then
-       git checkout -b feature/name
-   fi
-   ```
-```
-**Problems**: Verbose commands, hand-holding syntax, assumes Claude doesn't know basics, fragile
-
-### ✅ RIGHT BALANCE (Empowering)
-```markdown
-### 1. Verify Git State
-- Check current branch - if on main/master, create feature branch
-- Verify changes exist before proceeding
-- Review staged files (avoid secrets)
-```
-**Strengths**: Describes WHAT, lets Claude choose HOW, concise, resilient
+Notes:
+- Some Codex installations still use `~/.codex/skills`; if a workspace already uses that convention, preserve it.
+- Explicit invocation: user mentions `$skill-name`.
+- Implicit invocation: Codex matches user request against `description`.
+- Duplicate skill names are not merged; avoid name collisions across scopes.
 
 ---
 
-## Workflow Enforcement Techniques
+## Authoring Workflow
 
-Use these for critical workflows that Claude often violates:
+### 1. Define Trigger Contract
+- Draft `name` and `description` first.
+- Validate "should trigger" and "should not trigger" examples before writing body.
 
-| Technique | Pattern | Why It Works |
-|-----------|---------|--------------|
-| **Checkpoints** | "STOP and verify: After X, confirm Y" | Creates pause points |
-| **Confirmations** | "Confirm '✅ Item [N] complete'" | Forces sequential thinking |
-| **State Tracking** | "Update todo: mark 'in_progress'" | Explicit state transitions |
-| **Verification** | "Verify X posted successfully" | Prevents assumption-based skipping |
-| **Self-Monitoring** | "If doing Y, STOP - violation" | Enables self-correction |
-| **Process Red Flags** | List specific anti-patterns | Fast-fail detection |
+### 2. Decide Instruction-Only vs Bundled Resources
+- Instruction-only: default path.
+- Add `scripts/` only for fragile/repeated deterministic tasks.
+- Add `references/` for large domain docs, schemas, policies, or API details.
+- Add `assets/` for files copied/modified in outputs.
 
-**Signs you need enforcement**:
-- User says "you did X but forgot Y"
-- Steps get skipped or reordered
-- Batch processing occurs despite guidance
-- "I'll do X at the end" rationalizations
+### 3. Write SKILL.md Body
+- Keep body focused on "how to execute" after trigger.
+- Use sections that reduce ambiguity:
+  - Overview
+  - Workflow
+  - Validation checks
+  - Common mistakes
+  - Red flags / fail-fast conditions
 
-**Don't overuse when**: Workflow naturally sequential, steps independent, task simple (< 3 steps)
+### 4. Add Optional `agents/openai.yaml` When Needed
+- Use for UI metadata (`display_name`, `short_description`, icons, color).
+- Use policy controls (`allow_implicit_invocation`) when implicit triggering is risky.
+- Declare tool dependencies (for example MCP servers) when the skill requires them.
 
----
+### 5. Validate and Test
+- Validate frontmatter and naming constraints.
+- Test explicit invocation (`$skill-name`).
+- Test implicit invocation with at least:
+  - two prompts that should trigger
+  - two prompts that should not trigger
+- Smoke-test each script included in `scripts/`.
 
-## Common Mistakes in Writing Skills
-
-### ❌ Too Much HOW, Not Enough WHAT
-**Problem**: Verbose command examples instead of principles
-**Fix**: Describe what to achieve, let Claude choose commands
-
-### ❌ Reference Material Disguised as Skill
-**Problem**: 300+ lines of templates and checklists
-**Fix**: Move to docs/, keep skill as principles + links
-
-### ❌ No "Recurring Failures" Context
-**Problem**: Unclear why skill exists
-**Fix**: Add Overview explaining real problems this solves
-
-### ❌ Missing "Common Mistakes" Section
-**Problem**: No documentation of failure modes
-**Fix**: Document real failures from user experience
-
-### ❌ Duplicating Built-In Knowledge
-**Problem**: Teaching Claude things it already knows
-**Fix**: Only encode unique project/domain knowledge
-
-### ❌ Unclear Trigger Description
-**Problem**: Claude doesn't know when to use skill
-**Fix**: Add specific trigger terms and use cases to description
-
-### ❌ Scope Too Broad
-**Problem**: Skill tries to cover multiple distinct capabilities
-**Fix**: Split into focused skills (one capability each)
-
-### ❌ Wrong Filename
-**Problem**: Using `.claude.md` or `skill.md` instead of `SKILL.md`
-**Fix**: File MUST be `SKILL.md` (uppercase) in `~/.claude/skills/name/` or `.claude/skills/name/`
-
-### ❌ Weak Workflow Enforcement
-**Problem**: Describing sequential steps without enforcement, Claude batch processes
-**Fix**: Add checkpoints, confirmations, state tracking, self-monitoring
-**Detection signals**:
-- User reports "you did X but forgot Y"
-- Claude fixes multiple items before completing workflows
-- Steps get skipped or reordered
-- "I'll do X at the end" rationalizations
+### 6. Refactor for Token Efficiency
+- Move bulky examples/specs from SKILL.md into `references/`.
+- Keep only high-leverage instructions in SKILL.md.
+- Remove stale or duplicate guidance.
 
 ---
 
-## Testing Your Skill (Community Practice)
+## `agents/openai.yaml` Guidance
 
-**RED Phase**: Test Claude WITHOUT skill, document exact failures and rationalizations
+Use only when it adds runtime value.
 
-**GREEN Phase**: Add skill, test same scenarios, verify failures prevented
+Recommended fields:
+- `interface.display_name`
+- `interface.short_description`
+- `interface.default_prompt`
+- `policy.allow_implicit_invocation`
+- `dependencies.tools[]` (for MCP requirements)
 
-**REFACTOR Phase**: Find workarounds, add to "Common Mistakes" or "Red Flags", test again
-
-**Note**: TDD methodology is community best practice, not Anthropic requirement
-
----
-
-## Skill Locations
-
-**Personal** (`~/.claude/skills/`): Universal workflows, personal preferences
-**Project** (`.claude/skills/`): Project-specific patterns, team conventions
+If you set `default_prompt`, ensure it is short and explicitly references the skill as `$skill-name`.
 
 ---
 
-## Refactoring Existing Skills
+## Common Mistakes
 
-**When to refactor**: Exceeds 250 lines, verbose commands, duplicated content, missing sections
+### Mistake: Ambiguous Description
+Problem: Skill triggers unpredictably or not at all.
+Fix: Add clear trigger boundaries and explicit non-trigger cases in `description`.
 
-**Process**:
-1. Identify WHAT vs HOW sections
-2. Reduce HOW (consolidate to API reference)
-3. Expand WHAT (principles, workflow)
-4. Add "Common Mistakes" from real failures
-5. Add Overview with recurring failures
-6. Aim for 20-40% reduction
+### Mistake: "When to Use" Only in Body
+Problem: Invocation quality is weak because body loads after trigger.
+Fix: Move trigger logic into frontmatter `description`.
+
+### Mistake: Over-Scripting
+Problem: Skill becomes brittle and environment-dependent.
+Fix: Keep instructions first; add scripts only for deterministic repetition.
+
+### Mistake: Bloated SKILL.md
+Problem: Context waste and slower reasoning.
+Fix: Move bulk content to `references/` and keep SKILL.md focused.
+
+### Mistake: Monolithic Multi-Domain Skill
+Problem: Poor matching and conflicting workflows.
+Fix: Split by capability/domain; keep one job per skill.
+
+### Mistake: Invalid Frontmatter Keys
+Problem: Skill may fail validation or behave inconsistently across runtimes.
+Fix: Keep required keys correct and use optional keys only when supported.
+
+### Mistake: Unverified Trigger Behavior
+Problem: Skill appears correct but never activates correctly in real prompts.
+Fix: Run explicit/implicit trigger tests before shipping.
 
 ---
 
-## Red Flags When Writing Skills
+## Red Flags (Fail Fast)
 
-**Structure and content**:
-- ❌ Skill is mostly bash commands → Too much HOW
-- ❌ Over 300 lines without clear sections → Split or consolidate
-- ❌ No mention of recurring failures → Missing context
-- ❌ Duplicates general knowledge → Unnecessary
-- ❌ Could be a docs page → Use docs/
-- ❌ Overlaps with another skill → Consolidate
-- ❌ No "Common Mistakes" section → Missing failure docs
-- ❌ File not named `SKILL.md` (uppercase) → Won't load
+- `description` does not contain trigger boundaries.
+- SKILL.md exceeds practical context budget without references split.
+- Script-heavy content with no script testing.
+- Multiple unrelated capabilities in one skill.
+- Optional metadata added without runtime support check.
+- No negative test prompts for implicit invocation.
 
-**Workflow enforcement**:
-- ❌ Critical workflow without checkpoints → Will be violated
-- ❌ No confirmation requirements → Steps will be skipped
-- ❌ Sequential steps described but not enforced → Batch processing
-- ❌ No self-monitoring patterns → Claude won't detect violations
-- ❌ Missing "STOP" or verification language → Claude will rush ahead
+---
+
+## Quick Review Checklist
+
+- `name` is valid hyphen-case and <= 64 chars.
+- `description` is specific, bounded, and <= 1024 chars.
+- Skill is focused on one capability.
+- SKILL.md is concise and workflow-oriented.
+- `scripts/`, `references/`, and `assets/` are included only when justified.
+- Optional `agents/openai.yaml` exists only if UI/policy/dependency metadata is needed.
+- Explicit and implicit invocation behavior has been tested.

@@ -1,6 +1,6 @@
 ---
 name: pull-request-loop
-description: Iteratively review and harden a pull request by alternating review-pr and manage-pr-feedback until no actionable findings remain, with explicit stop conditions to prevent infinite loops or rabbit holes.
+description: Run controlled multi-cycle PR hardening by alternating review-pr and manage-pr-feedback until blockers and unresolved threads are cleared or stop conditions trigger. Use when one review/fix pass is insufficient. Do not use for single-pass review only, feedback-only handling, creating PRs, or post-merge cleanup.
 ---
 
 # PR Review Loop
@@ -23,6 +23,7 @@ Goal: reach a clean, review-ready PR state or stop safely with a clear escalatio
 - Resolve feedback at thread level, not only in code.
 - Prefer small, test-backed fixes each cycle.
 - Stop when loop risk appears; escalate instead of grinding.
+- Preserve timeline context: each cycle posts a new cycle-labeled summary comment; never edit previous cycle summaries.
 
 ## Required Loop State
 
@@ -35,12 +36,23 @@ Maintain these values at the start and end of every cycle:
 - `ci_status` (pass/fail/pending/unavailable)
 - `finding_fingerprint` (stable summary of current blockers)
 - `files_touched_in_cycle`
+- `assignee_present` (yes/no; authenticated GitHub user is in PR assignees)
+- `execution_worktree` (absolute path used for review/fix commands)
+- `head_branch_checked_out` (yes/no; execution worktree is on PR head branch)
 
 ## Workflow
 
 ### 1. Initialize
 
 - Confirm PR number, branch, and current mergeability.
+- Resolve authenticated GitHub login (`gh api user --jq .login`).
+- Ensure the authenticated user is assigned to the PR before review/fix cycles:
+  - `gh pr edit "$PR" --add-assignee "$GH_USER"`
+  - verify with `gh pr view "$PR" --json assignees --jq '.assignees[].login'`
+- Resolve execution worktree for the PR head branch before running review commands:
+  - if head branch is already checked out in another worktree, run review/fix commands there
+  - if not, use current repository worktree and check out the head branch
+  - never force branch checkout when Git reports branch/worktree binding conflicts
 - Capture baseline loop state.
 - Set `max_cycles` (default: 6).
 - Set no-progress threshold (default: 2 consecutive cycles).
@@ -70,11 +82,13 @@ Maintain these values at the start and end of every cycle:
 ### 5. Recompute State and Progress
 
 - Recompute full loop state.
+- Ensure this cycle has a new summary comment with cycle label (for example, `Cycle 2 Summary`), distinct from prior cycles.
 - Compare against previous cycle:
   - Did blocker count decrease?
   - Did unresolved thread count decrease?
   - Did fingerprint change meaningfully?
   - Did CI move forward?
+  - Is assignee still present?
 
 ### 6. Evaluate Stop Conditions
 
@@ -101,6 +115,9 @@ Before declaring done:
 - no pending requested-changes state tied to unresolved issues
 - relevant tests pass for touched code
 - PR has a final concise status update
+- authenticated GitHub user remains assigned to the PR
+- `execution_worktree` still maps to the PR head branch (`head_branch_checked_out=yes`)
+- no unresolved branch/worktree mismatch (for example, PR head bound to a different worktree than the one used)
 
 ## Escalation Output (When Stopping)
 
@@ -133,9 +150,19 @@ Provide:
 **Problem**: Reviewer noise and churn.
 **Fix**: Re-check existing threads and current code before posting.
 
+### ❌ Skipping assignee validation in loop execution
+**Problem**: PR feedback cycles complete with no explicit owner, causing follow-up ambiguity.
+**Fix**: In Initialize, add authenticated user as assignee and track `assignee_present` each cycle.
+
+### ❌ Ignoring branch/worktree binding for PR head
+**Problem**: `git checkout` fails because the PR branch is already attached to another worktree; review runs in the wrong path or aborts.
+**Fix**: Resolve `execution_worktree` in Initialize and run all cycle commands from that worktree.
+
 ## Red Flags (Fast-Fail)
 
 - Two consecutive cycles with unchanged blockers and unchanged thread count.
 - More files touched each cycle but no reduction in blocking findings.
 - Alternating reviewer requests that cannot both be satisfied under current policy.
 - Reopened threads for the same issue after multiple attempts.
+- Authenticated user is not assigned to the PR after initialization.
+- PR head branch is bound to a different worktree and `execution_worktree` is not updated.

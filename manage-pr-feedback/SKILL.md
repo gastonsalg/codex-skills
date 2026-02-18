@@ -1,6 +1,6 @@
 ---
 name: manage-pr-feedback
-description: Manages feedback on your PRs by reading, replying to, and resolving ALL reviewer comments - both inline review threads (code-specific) and conversation comments (review summaries with suggestions). Use when addressing PR review feedback as the PR author. Handles Copilot and human reviewers, thread resolution, and ensures no feedback is missed.
+description: Address feedback on an existing pull request by evaluating comments, implementing fixes, replying, resolving threads, and requesting re-review. Use when acting as PR author after review comments land. Do not use for first-pass PR code review, creating a new PR, or post-merge cleanup.
 ---
 
 # Manage PR Feedback Skill
@@ -11,6 +11,7 @@ This skill addresses recurring failures when responding to PR feedback:
 - **Replying to comments but forgetting to resolve threads** (most common)
 - **Only checking inline threads, missing conversation comments** (common)
 - **Missing non-blocking feedback in approved PRs** (common - approval creates false sense of completion)
+- **Processing feedback on unassigned PRs, leaving ownership unclear** (common)
 - Losing track of which feedback has been addressed
 - Batch processing feedback (fix all → reply all → resolve all), which causes forgotten resolutions
 - Not assessing whether reviewer suggestions are actually correct
@@ -55,6 +56,7 @@ This skill addresses recurring failures when responding to PR feedback:
 - **Specific**: Reference exact commits/lines changed
 - **Objective**: State facts, avoid defensiveness
 - **Actionable**: Clear what was done or will be done
+- **Signature**: Append `🤖 Generated with Codex` as the final line of every GitHub reply/comment body
 
 ### Approval Status Is Not Completion Signal
 **Critical**: PR approval ≠ all feedback addressed
@@ -66,11 +68,23 @@ This skill addresses recurring failures when responding to PR feedback:
 - **Assess each observation**: Even if marked "non-blocking", consider addressing for code quality
 - Don't use approval as signal to stop reading - parse the full comment text
 
+### Assignee Ownership (Required)
+- Feedback handling should keep PR ownership explicit: assignee = authenticated GitHub user driving the fixes
+- If the PR has no assignee, add the authenticated user before processing comments
+- If someone else is already assigned for valid team reasons, keep them and add authenticated user only when policy requires co-ownership
+
 ---
 
 ## Workflow
 
-### 0. Check and Resolve Merge Conflicts (If Present)
+### 0. Ensure PR Is Assigned to the Authenticated User
+**Before processing any feedback, ensure the PR has explicit ownership:**
+- Resolve authenticated login once (`gh api user --jq .login`)
+- Check current assignees on the PR
+- If authenticated user is missing, add them as assignee immediately
+- Verify assignee update succeeded, then continue
+
+### 1. Check and Resolve Merge Conflicts (If Present)
 **BEFORE processing feedback, handle any merge conflicts**:
 
 **Check for conflicts**:
@@ -87,7 +101,7 @@ This skill addresses recurring failures when responding to PR feedback:
 
 **Only proceed to feedback processing after conflicts are resolved.**
 
-### 1. Get All Feedback (Both Sources)
+### 2. Get All Feedback (Both Sources)
 **Check BOTH inline threads AND conversation comments**:
 - **Review threads**: Fetch unresolved review threads via GraphQL API (inline code comments with file/line context)
 - **Conversation comments**: Check PR conversation tab with `gh pr view $PR --comments` (review summaries, approvals with suggestions)
@@ -104,7 +118,7 @@ This skill addresses recurring failures when responding to PR feedback:
 - Create one todo per feedback item
 - Prioritize: blocking issues → security → suggestions → minor observations
 
-### 2. Process Each Comment Individually
+### 3. Process Each Comment Individually
 
 **CRITICAL**: You MUST complete ALL steps (A→B→C→D) for ONE comment before moving to the next.
 
@@ -143,6 +157,7 @@ This skill addresses recurring failures when responding to PR feedback:
 - Reference commit SHA if fixed: "Fixed in [sha]. Now [description]."
 - If declining: explain reasoning clearly with technical justification
 - If clarifying: ask specific questions
+- End reply body with signature footer: `🤖 Generated with Codex`
 - Verify reply posted successfully (check for 404 errors - means wrong ID type)
 
 #### D. Resolve Thread (IMMEDIATELY After Reply)
@@ -157,13 +172,15 @@ This skill addresses recurring failures when responding to PR feedback:
 
 **Now and ONLY now proceed to the next comment. Return to step A.**
 
-### 3. Post Summary Comment
+### 4. Post Summary Comment
 After processing all feedback (inline threads + conversation comments):
 - List what was addressed with commit references
 - Reply to conversation comments with explanations
 - Trigger official re-review requests via the GitHub API for each reviewer (humans + Copilot). Only fall back to @-mentions when the API rejects the reviewer (e.g., chatgpt-codex-connector).
 - Mention any items awaiting reviewer response
-- Check whether you already left a status update; if so, edit the last comment instead of creating another (use `gh pr comment "$PR" --edit-last --repo owner/repo`).
+- End summary comment body with signature footer: `🤖 Generated with Codex`
+- Always post a NEW summary comment for each completed feedback pass; do not edit prior summary comments.
+- In multi-pass workflows (for example `pull-request-loop`), include pass/cycle identifier in the summary heading (for example, `Feedback Pass 2`) so timeline context remains intact.
 - When posting new summaries, pipe the body via a single-quoted heredoc so the shell doesn't swallow backticks or quotes:
   ```bash
   cat <<'EOF' | gh pr comment $PR --repo owner/repo -F -
@@ -177,80 +194,14 @@ After processing all feedback (inline threads + conversation comments):
 
 ## API Quick Reference
 
-### Get Unresolved Threads
-```bash
-gh api graphql -f query='
-query {
-  repository(owner: "owner", name: "repo") {
-    pullRequest(number: '$PR') {
-      reviewThreads(first: 50) {
-        nodes {
-          id
-          isResolved
-          comments(first: 10) {
-            nodes {
-              id
-              databaseId
-              author { login }
-              body
-              path
-              line
-            }
-          }
-        }
-      }
-    }
-  }
-}' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)'
-```
+For full command templates, load `references/github-pr-feedback-api.md`.
 
-**Important**: Each comment has TWO IDs:
-- `id` (node ID): GraphQL string like `"PRRC_kwDO..."` - use for GraphQL mutations
-- `databaseId`: Integer like `2541077340` - use for REST API replies
-
-### Get PR Conversation Comments
-```bash
-# Shows ALL comments including review summaries with suggestions
-gh pr view $PR --comments
-
-# Or via API for recent comments
-gh api repos/owner/repo/issues/$PR/comments
-```
-
-### Reply to Comment
-```bash
-# CRITICAL: Use databaseId (integer), NOT node id (GraphQL string)
-# Get databaseId from GraphQL query above
-gh api --method POST \
-  repos/owner/repo/pulls/$PR/comments/$DATABASE_ID/replies \
-  --field body="Fixed in commit abc1234. Now validates input before processing."
-```
-
-**Common error**: Using node ID (`PRRC_kwDO...`) returns 404. Must use `databaseId` (integer).
-
-### Resolve Thread (CRITICAL - Don't Forget)
-```bash
-# Use thread ID from GraphQL query above
-gh api graphql -f query='
-mutation {
-  resolveReviewThread(input: {threadId: "THREAD_ID"}) {
-    thread {
-      id
-      isResolved
-    }
-  }
-}'
-```
-
-### Post Summary and Request Re-Review
-```bash
-gh pr comment $PR -b "All feedback addressed:
-- ✅ Fixed SQL injection (commit abc1234)
-- ✅ Added error handling (commit def5678)
-- ✅ Declined suggestion X (reasoning: performance trade-off)
-
-@reviewer Ready for re-review."
-```
+Minimum reminders:
+- Fetch both unresolved review threads and conversation comments.
+- Reply API requires `databaseId` (integer), not GraphQL node ID.
+- Resolve handled threads immediately after posting reply.
+- Use heredoc or `-F -`/`--body-file` patterns to avoid shell escaping issues.
+- Request re-review via API after posting the summary.
 
 ---
 
@@ -282,10 +233,19 @@ gh pr comment $PR -b "All feedback addressed:
 **Problem**: Losing track of which threads are addressed
 **Fix**: Use TodoWrite to track each thread systematically
 
+### ❌ Skipping Assignee Check Before Feedback Work
+**Problem**: Addressing review comments while PR remains unassigned, causing unclear ownership and follow-up gaps.
+**Fix**: Make assignee validation the first step in workflow: authenticated user must be in PR assignees before processing comments.
+**Detection**: `gh pr view $PR --json assignees --jq '.assignees[].login'` does not include the authenticated user.
+
 ### ❌ Posting Duplicate Summary Comments
 **Problem**: Re-running `gh pr comment` after a partial failure posts 2-3 identical re-review summaries, spamming reviewers.
-**Fix**: Before retrying, confirm whether the previous command created a comment (check for the returned URL or run `gh pr view $PR --comments | tail`). If you only need to tweak wording, edit the last comment with `gh pr comment $PR --edit-last --repo owner/repo` instead of adding another.
+**Fix**: Before retrying, confirm whether the previous command created a comment (check for the returned URL or run `gh pr view $PR --comments | tail`). If it already posted, do not post again unless there is net-new information; if clarification is needed, add a short follow-up comment instead of editing history.
 **Detection**: CLI already printed `https://github.com/...` or the conversation feed shows your status update.
+
+### ❌ Editing Historical Summary Comments Across Passes
+**Problem**: Editing the prior pass summary comment rewrites history and breaks review conversation context.
+**Fix**: Never edit prior pass/cycle summary comments. Post a new comment for each pass with explicit pass/cycle label and scope.
 
 ### ❌ Shell Escaping Problems When Posting Summaries
 **Problem**: Using inline `--body` with quotes/backticks causes `gh pr comment` commands to fail silently, leading to retries and duplicate posts once quoting is corrected.
@@ -328,6 +288,10 @@ gh pr comment $PR -b "All feedback addressed:
 - ❌ Wrong: `repos/owner/repo/pulls/190/comments/PRRC_kwDOJYs3c86XdcNc/replies`
 - ✅ Right: `repos/owner/repo/pulls/190/comments/2541077340/replies`
 
+### ❌ Missing AI Signature on Feedback Responses
+**Problem**: Thread replies or summary comments are posted without provenance footer.
+**Fix**: Append a blank line, then `🤖 Generated with Codex` as the final line in each GitHub reply/comment body.
+
 ---
 
 ## Red Flags (Fail Fast)
@@ -347,6 +311,7 @@ gh pr comment $PR -b "All feedback addressed:
 - ❌ Not replying to reviewer questions → Threads left unresolved
 - ❌ Defensive or dismissive tone in replies → Unprofessional
 - ❌ Ignoring blocking feedback → PR won't be approved
+- ❌ Replying/posting summary without `🤖 Generated with Codex` footer
 
 **Conflict handling violations**:
 - ❌ Processing feedback while PR has merge conflicts → Resolve conflicts first

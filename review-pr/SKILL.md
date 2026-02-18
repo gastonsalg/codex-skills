@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Reviews a Pull Request with inline code comments and structured feedback. Posts comments directly on specific lines of code (like Copilot) instead of monolithic review blobs. Use when asked to review a PR.
+description: Review a pull request and post precise inline findings plus a concise review summary. Use when the task is to evaluate code quality/risk in a PR. Do not use to implement fixes, resolve author feedback loops, create new PRs, or perform post-merge branch cleanup.
 ---
 
 # Review Pull Request Skill
@@ -33,6 +33,7 @@ This skill addresses recurring failures in PR reviews:
 - **Non-redundant**: Don't duplicate other reviewers' feedback
 - **Inline for code issues**: Post comments on exact lines (MANDATORY)
 - **Format**: Emoji prefix (❌ Critical | ⚠️ Warning | 💡 Suggestion | 🔍 Question | ✅ Strength) + Issue + Fix
+- **Signature**: Append `🤖 Generated with Codex` as the final line of every inline comment and review summary
 
 ---
 
@@ -82,6 +83,7 @@ This skill addresses recurring failures in PR reviews:
 - Use `/repos/{owner}/{repo}/pulls/{pr}/comments` endpoint
 - Requires: `commit_id`, `path`, `line`, `side` ("RIGHT" for new/modified, "LEFT" for deleted)
 - Use `suggestion` code fence for one-click fixes
+- Append signature footer at end of each comment body: `🤖 Generated with Codex`
 
 **For architectural/conceptual feedback** - Use review summary
 
@@ -107,6 +109,7 @@ This skill addresses recurring failures in PR reviews:
 - State approval rationale clearly
 - Keep concise - no PR overview, no file lists
 - For multi-line review text, do NOT use quoted `\n` in `--body`; use `--body-file` (or heredoc to a temp file) and verify rendered formatting after posting
+- End review summary text with signature footer: `🤖 Generated with Codex`
 
 ### 8. Return to Main Branch
 - Always return to main after review
@@ -115,53 +118,13 @@ This skill addresses recurring failures in PR reviews:
 
 ## API Quick Reference
 
-### Inline Comments Require Specific Endpoint
-- Use `/pulls/{pr}/comments` endpoint (NOT `/reviews`) with `line` parameter
-- Required fields: `commit_id`, `path`, `line`, `side`
-- `side` parameter: `"RIGHT"` for new/modified lines, `"LEFT"` for deleted lines
-- Use `suggestion` code fence for one-click fixes
+For full command templates, load `references/github-pr-review-api.md`.
 
-### Suggestion Block Format
-```markdown
-\`\`\`suggestion
-// Replacement code here
-\`\`\`
-```
-GitHub creates an "Apply suggestion" button for one-click fixes.
-
-### Resolve Thread (GraphQL Required)
-```bash
-# List unresolved threads
-gh api graphql -f query='query {
-  repository(owner: "{owner}", name: "{repo}") {
-    pullRequest(number: '$PR') {
-      reviewThreads(first: 100) {
-        nodes { id isResolved comments(first: 1) { nodes { body } } }
-      }
-    }
-  }
-}'
-
-# Resolve thread
-gh api graphql -f query='mutation($threadId: ID!) {
-  resolveReviewThread(input: {threadId: $threadId}) {
-    thread { isResolved }
-  }
-}' -f threadId="THREAD_ID"
-```
-
-### Review Summary Formatting (Avoid Literal `\n`)
-```bash
-# Write review body with real newlines, then submit
-cat <<'EOF' > /tmp/review-body.md
-Review result: blocker found.
-
-- [Critical] ...
-EOF
-
-gh pr review $PR --comment --body-file /tmp/review-body.md
-```
-Use `--body-file` for multi-line reviews so GitHub renders Markdown correctly.
+Minimum reminders:
+- Inline review comments use `/pulls/{pr}/comments` (not `/reviews`).
+- Suggestion blocks should use the `suggestion` fenced code block.
+- Resolve threads via GraphQL mutation after confirming issue is addressed.
+- Use `--body-file` for multiline review summaries to avoid literal `\n` rendering.
 
 ---
 
@@ -217,6 +180,10 @@ Use `--body-file` for multi-line reviews so GitHub renders Markdown correctly.
 **Fix**: Check PR author before approval - if it matches current user, use `--comment` instead of `--approve`
 **Detection**: Getting GraphQL error "Can not approve your own pull request" when running approval command
 
+### ❌ Missing AI Signature on Review Messages
+**Problem**: Inline comments or review summary are posted without provenance footer.
+**Fix**: Append a blank line, then `🤖 Generated with Codex` at the end of every GitHub review message body.
+
 ---
 
 ## Red Flags (Fail Fast)
@@ -233,3 +200,4 @@ Use `--body-file` for multi-line reviews so GitHub renders Markdown correctly.
 - ❌ Leaving unresolved threads when issues have been fixed (from any reviewer)
 - ❌ Attempting to approve PR without checking if you're the author
 - ❌ Posting review summary with quoted `\n` in `--body` (renders escaped text)
+- ❌ Posting inline/review summary text without `🤖 Generated with Codex` footer

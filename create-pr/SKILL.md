@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Creates a feature branch (if needed), commits changes, runs automated code review, and creates a PR with proper description. Use when ready to commit code changes. Enforces the mandatory git workflow and includes automated quality checks.
+description: Create or update a pull request from local code changes by enforcing safe branch workflow, tests, review, push, PR creation, and assignee checks. Use when code is ready to commit/push and open or refresh a PR. Do not use for PR code review only, review-feedback handling only, or post-merge cleanup.
 ---
 
 # Create Pull Request Skill
@@ -14,6 +14,7 @@ This skill enforces the mandatory git workflow for production safety. Direct pus
 - Pushing directly to protected branches
 - Skipping tests before committing
 - Creating PRs without running code review
+- Leaving PRs unassigned after creation
 - Committing secrets or temporary files
 - Creating PRs targeting wrong base branch (feature branch instead of main)
 - Using stale local branches from previous (merged) PRs instead of branching fresh from main
@@ -41,8 +42,10 @@ This skill enforces the mandatory git workflow for production safety. Direct pus
 - ✅ Work in feature branches (create if on main)
 - ✅ Run relevant tests before committing
 - ✅ Run code review before creating PR
+- ✅ Assign the PR to the authenticated GitHub user (PR owner) after creation
 - ✅ Verify staged changes (avoid secrets)
 - ✅ Write descriptive commit messages
+- ✅ Add signature footer `🤖 Generated with Codex` to AI-authored PR descriptions/comments
 
 ---
 
@@ -96,7 +99,7 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 - Push with upstream tracking: `git push -u origin <branch-name>`
 - Verify push succeeded
 
-### 6. Assess Base Branch & Create Pull Request
+### 6. Assess Base Branch, Create Pull Request, and Set Assignee
 **CRITICAL: Determine correct base/destination branch before creating PR**
 
 **Default pattern (most common):**
@@ -120,11 +123,18 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 - Migration notes (if applicable)
 - Related issues (Fixes #123)
 - **Formatting warning**: `gh pr create/edit --body "line\nline"` sends literal `\n`. Use real newlines via a here-doc or `--body-file`, then preview with `gh pr view` to confirm rendering.
+- Signature footer on final line: `🤖 Generated with Codex`
 
 **Create PR with descriptive title and structured body**
 
+**Immediately assign PR ownership:**
+- Resolve authenticated GitHub login via API (`gh api user --jq .login`)
+- Assign PR to that login (the user/account driving the work)
+- Verify the PR now shows that assignee before leaving this step
+
 ### 7. Final Verification
 - View PR to confirm creation
+- Confirm assignee is set to authenticated user login
 - Check CI status (all checks should trigger)
 - Verify no accidental push to main (git log check)
 
@@ -175,6 +185,11 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 - Both PRs target `main` independently
 - Can merge in any order
 
+### ❌ Leaving PR Unassigned
+**Problem**: Creating or updating PRs without setting an assignee leaves ownership unclear.
+**Fix**: Always assign the PR to the authenticated GitHub user right after PR creation (or when updating an existing PR).
+**Detection**: `gh pr view --json assignees --jq '.assignees[].login'` does not include the authenticated user.
+
 ### ❌ Reusing Stale Local Branches
 **Problem**: Using an existing local branch from a previous (already merged) PR instead of creating a fresh branch from main. Causes merge conflicts because local branch is based on old main.
 **Fix**: Always check if the current branch is fresh. Red flags: branch name references old version/task, branch doesn't exist on remote, branch is behind main.
@@ -199,6 +214,10 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 **Problem**: Running `gh pr edit --body "line1\nline2"` stores literal `\n`, rendering the entire body as a single heading.
 **Fix**: Use real newlines (here-doc or `--body-file`) and view the PR afterward to confirm Markdown rendering.
 
+### ❌ Missing AI Signature on PR Text
+**Problem**: PR description/comment authored by Codex is posted without provenance footer.
+**Fix**: Append a blank line, then `🤖 Generated with Codex` as the final line.
+
 ---
 
 ## Edge Cases
@@ -211,6 +230,7 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 
 **PR exists for branch:**
 - Add more commits and push (updates existing PR)
+- Verify assignee still includes authenticated user; add it if missing
 
 **Merge conflicts:**
 - Fetch main, rebase, resolve conflicts, push with `--force-with-lease`
@@ -234,3 +254,4 @@ Co-Authored-By: codex <223734131+codex@users.noreply.github.com>
 - ❌ Secrets in staged changes
 - ❌ Force push to main/master
 - ❌ PR targeting feature branch without clear justification
+- ❌ PR description/comment posted without `🤖 Generated with Codex` footer
